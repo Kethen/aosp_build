@@ -1,0 +1,102 @@
+#!/bin/bash
+set -e
+git config --global user.email "kwchuiaa@connect.ust.hk"
+git config --global user.name "Katharine Chui"
+export USE_CCACHE=1
+export CCACHE_EXEC=/usr/bin/ccache
+ccache -M 50G
+
+if [ "$SKIP_REPO" != "true" ]
+then
+	rm -rf .repo/local_manifests
+	repo init -u https://android.googlesource.com/platform/manifest -b $BRANCH
+	mkdir .repo/local_manifests
+	cp /manifests/* .repo/local_manifests/
+	cp /common_manifests/* .repo/local_manifests/
+	repo sync -c -j$(nproc) --force-sync
+fi
+
+
+# reset changes to build/make
+(
+	cd build/make
+	git checkout .
+)
+
+# patch pathmap.mk to include project-path-for and project-set-path
+cat /scripts/pathmap_ext >> build/core/pathmap.mk
+
+# patch config.mk to include qcom mk magic
+echo > /tmp/config.mk
+cat build/core/config.mk | while read -r LINE;
+do
+	echo "$LINE" >> /tmp/config.mk
+	if [ "$LINE" == 'FIND_LEAVES_EXCLUDES := $(addprefix --prune=, $(SCAN_EXCLUDE_DIRS) .repo .git)' ]
+	then
+		cat /scripts/config_ext >> /tmp/config.mk
+		cat /scripts/target_ext >> /tmp/config.mk
+	fi
+done
+mv /tmp/config.mk build/core/config.mk
+
+# allow PRODUCT_SOONG_NAMESPACES and PRODUCT_CFI_INCLUDE_PATH to be modified for qcom make magics
+echo > /tmp/product.mk
+cat build/core/product.mk | while read -r LINE;
+do
+	if [ "$LINE" == '_readonly_late_variables += \' ]
+	then
+		echo '_readonly_late_variables += PRODUCT_SOONG_NAMESPACES PRODUCT_CFI_INCLUDE_PATHS' >> /tmp/product.mk
+	fi
+	echo "$LINE" >> /tmp/product.mk
+done
+mv /tmp/product.mk  build/core/product.mk
+
+# only some files are wanted from the lineage vendor
+rm -rf vendor/lineage_files
+mkdir vendor/lineage_files
+(
+	cd vendor/lineage
+	git checkout .
+)
+mv vendor/lineage/libbfqio vendor/lineage_files/
+rm -r vendor/lineage/*
+
+# patch in custom packages
+if [ -n "$CUSTOM_PACKAGES" ]
+then
+	echo "PRODUCT_PACKAGES += $CUSTOM_PACKAGES" >> build/target/product/aosp_base_telephony.mk
+fi
+
+# remove unwanted packages
+if [ -n "$REMOVE_PACKAGES" ]; then
+	mkdir -p vendor/remove_unused_module
+	echo '
+include $(CLEAR_VARS)
+LOCAL_MODULE := remove_unused_module
+LOCAL_MODULE_TAGS := optional
+
+LOCAL_MODULE_CLASS := FAKE
+LOCAL_MODULE_SUFFIX := $(COMMON_ANDROID_PACKAGE_SUFFIX)
+
+LOCAL_OVERRIDES_PACKAGES +='" $REMOVE_PACKAGES"'
+include $(BUILD_SYSTEM)/base_rules.mk
+
+$(LOCAL_BUILT_MODULE):
+        $(hide) echo "Fake: $@"
+        $(hide) mkdir -p $(dir $@)
+        $(hide) touch $@
+
+PACKAGES.$(LOCAL_MODULE).OVERRIDES := $(strip $(LOCAL_OVERRIDES_PACKAGES))
+' > vendor/remove_unused_module/Android.mk
+echo "PRODUCT_PACKAGES += remove_unused_module" >> build/target/product/aosp_base_telephony.mk
+else
+	if [ -d vendor/remove_unused_module ]
+	then
+		rm -r vendor/remove_unused_module
+	fi
+fi
+
+source build/envsetup.sh
+lunch aosp_$DEVICE-user
+m -j$(nproc)
+

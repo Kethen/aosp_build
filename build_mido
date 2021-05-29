@@ -1,0 +1,6 @@
+#!/bin/bash
+MANIFESTS="$PWD/manifests_mido"
+DEVICE=mido
+EXTRAS="-e ALLOW_MISSING_DEPENDENCIES=true"
+source src_me
+

@@ -1,0 +1,10 @@
+<manifest>
+  <!--Device tree-->
+  <project name="Kethen/android_device_xiaomi_mido.git" path="device/xiaomi/mido" revision="aosp-10" remote="github"/>
+  <!--Hardware-->
+  <project name="LineageOS/android_hardware_xiaomi" path="hardware/xiaomi" revision="lineage-17.1" remote="github"/>
+  <!--Kernel-->
+  <project name="zeelog/android_kernel_xiaomi_mido" path="kernel/xiaomi/mido" revision="lineage-17.1" remote="github"/>
+  <!--Blobs-->
+  <project name="Kethen/proprietary_vendor_xiaomi" path="vendor/xiaomi" revision="aosp-10" remote="github"/>
+</manifest>

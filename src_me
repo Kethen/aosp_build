@@ -1,0 +1,16 @@
+podman run \
+	--security-opt label=disable \
+	--net host \
+	-it --rm \
+	-v "./src:/src" \
+	-v "./scripts:/scripts:ro" \
+	-w "/src" \
+	-v "./manifests:/common_manifests:ro" \
+	-v "$MANIFESTS:/manifests:ro" \
+	-e "DEVICE=$DEVICE" \
+	-e "BRANCH=android-security-10.0.0_r54" \
+	-e "SKIP_REPO=true" \
+	-e "CUSTOM_PACKAGES=Trebuchet" \
+	$EXTRAS \
+	--entrypoint '["/bin/bash", "/scripts/init"]' \
+eos_builder
